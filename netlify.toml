@@ -1,0 +1,7 @@
+[build]
+  command = "npm run build" # The command to build your site
+  publish = "dist"          # The directory Vite builds to
+
+[dev]
+  command = "npm run dev"
+  port = 5173
