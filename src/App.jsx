@@ -7,9 +7,8 @@ import {
   signInWithCustomToken, 
   onAuthStateChanged, 
   GoogleAuthProvider, 
-  signInWithPopup, 
   signOut,
-  getRedirectResult, // <-- NEW: For handling sign-in more reliably
+  getRedirectResult,
   signInWithRedirect
 } from 'firebase/auth';
 import { 
@@ -23,8 +22,8 @@ import {
   where,
   limit,
   writeBatch,
-  addDoc, // <-- NEW: For adding bookings
-  serverTimestamp, // <-- NEW: For booking dates
+  addDoc, 
+  serverTimestamp, 
   setLogLevel
 } from 'firebase/firestore';
 
@@ -34,9 +33,10 @@ let viteAppId = undefined;
 let viteInitialAuthToken = undefined;
 
 // Check if we are in the preview environment
-if (typeof __firebase_config === 'undefined') {
-    // We are NOT in the preview env, so we must be in Vite/Netlify.
-    // It's safe to use import.meta here.
+if (typeof __firebase_config !== 'undefined') {
+    // We are in the preview environment, do nothing here.
+} else if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
+    // We are in the Vite/Netlify environment
     viteFirebaseConfig = import.meta.env.VITE_FIREBASE_CONFIG;
     viteAppId = import.meta.env.VITE_APP_ID;
     viteInitialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
@@ -106,17 +106,27 @@ const StarIcon = ({ className = "w-5 h-5 text-yellow-400" }) => (
     <path fillRule="evenodd" d="M10.868 2.884c.321-.662 1.135-.662 1.456 0l1.82 3.75 4.12 1.013c.72.176 1.006.993.486 1.488l-3.23 3.148.86 4.545c.12 1.054-.87 1.848-1.84 1.353l-3.928-2.065-3.928 2.065c-.97.495-1.96-.299-1.84-1.353l.86-4.545-3.23-3.148c-.52-.495-.234-1.312.486-1.488l4.12-1.013 1.82-3.75z" clipRule="evenodd" />
   </svg>
 );
-// NEW: Credit Card Icon for Payment
 const CreditCardIcon = ({ className = "w-5 h-5" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h6M3 17.25l1.5-1.5M15 17.25l1.5-1.5M16.5 12h.008v.008h-.008V12z" />
     <path d="M2.25 6.75C2.25 5.64543 3.14543 4.75 4.25 4.75H19.75C20.8546 4.75 21.75 5.64543 21.75 6.75V17.25C21.75 18.3546 20.8546 19.25 19.75 19.25H4.25C3.14543 19.25 2.25 18.3546 2.25 17.25V6.75Z" strokeWidth="1.5" />
   </svg>
 );
-// NEW: Calendar Icon for Bookings
 const CalendarIcon = ({ className = "w-5 h-5" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+  </svg>
+);
+// NEW: Icon for Rooms
+const BedIcon = ({ className = "w-5 h-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.75 6.75h16.5v.75H3.75v-.75z" />
+  </svg>
+);
+// NEW: Icon for Guests/Capacity
+const UserIcon = ({ className = "w-5 h-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
   </svg>
 );
 
@@ -124,12 +134,10 @@ const CalendarIcon = ({ className = "w-5 h-5" }) => (
 // --- Header Component ---
 const Header = ({ isMenuOpen, setIsMenuOpen, auth, user, onNavigate }) => {
   
-  // NEW SIGN-IN FIX: Use signInWithRedirect
-  // This avoids pop-up blockers entirely.
+  // SIGN-IN FIX: Use signInWithRedirect
   const handleSignIn = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      // This will redirect the user to Google's sign-in page
       await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
@@ -160,7 +168,7 @@ const Header = ({ isMenuOpen, setIsMenuOpen, auth, user, onNavigate }) => {
           <div className="hidden md:flex md:items-center md:space-x-8">
             <button onClick={() => onNavigate('home')} className="font-medium text-gray-700 hover:text-blue-600 transition-colors">Home</button>
             <button onClick={() => onNavigate('searchResults', { destination: 'All' })} className="font-medium text-gray-500 hover:text-blue-600 transition-colors">Hotels</button>
-            {/* NEW: Show My Bookings if logged in */}
+            {/* Show My Bookings if logged in */}
             {user && (
               <button onClick={() => onNavigate('bookings')} className="font-medium text-gray-500 hover:text-blue-600 transition-colors">My Bookings</button>
             )}
@@ -283,6 +291,7 @@ const BookingForm = ({ onSearch }) => {
           <label htmlFor="destination" className="block text-sm font-medium text-gray-700 mb-1">
             Destination
           </label>
+          {/* FIX: Added text-gray-900 */}
           <input
             type="text"
             id="destination"
@@ -296,6 +305,7 @@ const BookingForm = ({ onSearch }) => {
           <label htmlFor="check-in" className="block text-sm font-medium text-gray-700 mb-1">
             Check-in
           </label>
+          {/* FIX: Added text-gray-900 */}
           <input
             type="date"
             id="check-in"
@@ -309,6 +319,7 @@ const BookingForm = ({ onSearch }) => {
           <label htmlFor="check-out" className="block text-sm font-medium text-gray-700 mb-1">
             Check-out
           </label>
+          {/* FIX: Added text-gray-900 */}
           <input
             type="date"
             id="check-out"
@@ -322,6 +333,7 @@ const BookingForm = ({ onSearch }) => {
            <label htmlFor="guests" className="block text-sm font-medium text-gray-700 mb-1">
             Guests
           </label>
+          {/* FIX: Added text-gray-900 */}
           <input
             type="number"
             id="guests"
@@ -393,53 +405,103 @@ const HotelCard = ({ hotel, onSelectHotel }) => {
 };
 
 // --- Add Sample Hotels Button ---
+// NEW: This now adds rooms to each hotel
 const AddSampleHotelsButton = ({ db, appId }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [isDone, setIsDone] = useState(false);
-
-  const mockHotels = [
-    {
-      name: "The Grand Resort",
-      location: "Miami, Florida",
-      price: 299,
-      rating: 4.8,
-      image: "https://placehold.co/600x400/60a5fa/ffffff?text=Grand+Resort",
-      description: "Experience the ultimate luxury at The Grand Resort, located on the beautiful shores of Miami. Enjoy breathtaking ocean views, world-class dining, and an unforgettable stay.",
-      amenities: ["Pool", "Wi-Fi", "Gym", "Spa", " beachfront"]
-    },
-    {
-      name: "Mountain View Lodge",
-      location: "Aspen, Colorado",
-      price: 349,
-      rating: 4.9,
-      image: "https://placehold.co/600x400/818cf8/ffffff?text=Mountain+Lodge",
-      description: "Nestled in the heart of the Rocky Mountains, the Mountain View Lodge offers stunning vistas and cozy, luxurious accommodations. Perfect for a ski trip or a summer getaway.",
-      amenities: ["Wi-Fi", "Gym", "Spa", "Ski-in/Ski-out"]
-    },
-    {
-      name: "Urban Oasis Hotel",
-      location: "New York, NY",
-      price: 249,
-      rating: 4.7,
-      image: "https://placehold.co/600x400/a78bfa/ffffff?text=Urban+Oasis",
-      description: "An oasis of calm in the middle of the bustling city. The Urban Oasis Hotel provides a chic, modern retreat with easy access to all major attractions.",
-      amenities: ["Pool", "Wi-Fi", "Gym", "Rooftop Bar"]
-    },
-  ];
 
   const handleAddHotels = async () => {
     setIsAdding(true);
     try {
       const hotelsColRef = collection(db, `/artifacts/${appId}/public/data/hotels`);
       const batch = writeBatch(db);
-      
-      mockHotels.forEach((hotel) => {
-        const docRef = doc(hotelsColRef);
-        batch.set(docRef, hotel);
+
+      // --- Hotel 1: The Grand Resort ---
+      const hotel1Id = "grand_resort_miami";
+      const hotel1Ref = doc(hotelsColRef, hotel1Id);
+      batch.set(hotel1Ref, {
+        name: "The Grand Resort",
+        location: "Miami, Florida",
+        price: 299, // Base price
+        rating: 4.8,
+        image: "https://placehold.co/600x400/60a5fa/ffffff?text=Grand+Resort",
+        description: "Experience the ultimate luxury at The Grand Resort, located on the beautiful shores of Miami. Enjoy breathtaking ocean views, world-class dining, and an unforgettable stay.",
+        amenities: ["Pool", "Wi-Fi", "Gym", "Spa", "Beachfront"]
       });
-      
+      // Rooms for Hotel 1
+      batch.set(doc(hotel1Ref, "rooms", "room_101"), {
+        type: "Standard Queen",
+        price: 299,
+        capacity: 2,
+        image: "https://placehold.co/600x400/60a5fa/ffffff?text=Standard+Queen"
+      });
+      batch.set(doc(hotel1Ref, "rooms", "room_102"), {
+        type: "Oceanfront King Suite",
+        price: 459,
+        capacity: 2,
+        image: "https://placehold.co/600x400/60a5fa/ffffff?text=King+Suite"
+      });
+      batch.set(doc(hotel1Ref, "rooms", "room_103"), {
+        type: "Family Room (2 Doubles)",
+        price: 399,
+        capacity: 4,
+        image: "https://placehold.co/600x400/60a5fa/ffffff?text=Family+Room"
+      });
+
+      // --- Hotel 2: Mountain View Lodge ---
+      const hotel2Id = "mountain_lodge_aspen";
+      const hotel2Ref = doc(hotelsColRef, hotel2Id);
+      batch.set(hotel2Ref, {
+        name: "Mountain View Lodge",
+        location: "Aspen, Colorado",
+        price: 349,
+        rating: 4.9,
+        image: "https://placehold.co/600x400/818cf8/ffffff?text=Mountain+Lodge",
+        description: "Nestled in the heart of the Rocky Mountains, the Mountain View Lodge offers stunning vistas and cozy, luxurious accommodations. Perfect for a ski trip or a summer getaway.",
+        amenities: ["Wi-Fi", "Gym", "Spa", "Ski-in/Ski-out"]
+      });
+      // Rooms for Hotel 2
+      batch.set(doc(hotel2Ref, "rooms", "room_201"), {
+        type: "Cozy King",
+        price: 349,
+        capacity: 2,
+        image: "https://placehold.co/600x400/818cf8/ffffff?text=Cozy+King"
+      });
+      batch.set(doc(hotel2Ref, "rooms", "room_202"), {
+        type: "Mountain-View Suite",
+        price: 599,
+        capacity: 4,
+        image: "https://placehold.co/600x400/818cf8/ffffff?text=Mountain+Suite"
+      });
+
+      // --- Hotel 3: Urban Oasis Hotel ---
+      const hotel3Id = "urban_oasis_nyc";
+      const hotel3Ref = doc(hotelsColRef, hotel3Id);
+      batch.set(hotel3Ref, {
+        name: "Urban Oasis Hotel",
+        location: "New York, NY",
+        price: 249,
+        rating: 4.7,
+        image: "https://placehold.co/600x400/a78bfa/ffffff?text=Urban+Oasis",
+        description: "An oasis of calm in the middle of the bustling city. The Urban Oasis Hotel provides a chic, modern retreat with easy access to all major attractions.",
+        amenities: ["Pool", "Wi-Fi", "Gym", "Rooftop Bar"]
+      });
+      // Rooms for Hotel 3
+      batch.set(doc(hotel3Ref, "rooms", "room_301"), {
+        type: "City-View Queen",
+        price: 249,
+        capacity: 2,
+        image: "https://placehold.co/600x400/a78bfa/ffffff?text=City+Queen"
+      });
+      batch.set(doc(hotel3Ref, "rooms", "room_302"), {
+        type: "The Penthouse",
+        price: 799,
+        capacity: 2,
+        image: "https://placehold.co/600x400/a78bfa/ffffff?text=Penthouse"
+      });
+
       await batch.commit();
-      console.log("Sample hotels added successfully!");
+      console.log("Sample hotels and rooms added successfully!");
       setIsDone(true);
     } catch (error) {
       console.error("Error adding sample hotels:", error);
@@ -454,10 +516,10 @@ const AddSampleHotelsButton = ({ db, appId }) => {
         disabled={isAdding || isDone}
         className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-gray-400"
       >
-        {isDone ? "Sample Hotels Added!" : isAdding ? "Adding..." : "Add Sample Hotels to DB"}
+        {isDone ? "Sample Hotels & Rooms Added!" : isAdding ? "Adding..." : "Add Sample Hotels & Rooms"}
       </button>
       <p className="text-sm text-gray-600 mt-2">
-        Click this button once to populate the empty database with sample data.
+        Click this button once to populate the database with hotels and their available rooms.
       </p>
     </div>
   );
@@ -685,18 +747,75 @@ const AmenityIcon = ({ name }) => {
   return <StarIcon className="w-6 h-6 text-blue-600" />;
 };
 
+// --- NEW: Room Card Component (for Hotel Details Page) ---
+const RoomCard = ({ hotel, room, onNavigate, user }) => {
 
-// --- Hotel Details Page Component ---
+  const handleBookRoom = () => {
+    if (!user) {
+      alert("Please sign in to book this room.");
+      // Or we could trigger the sign-in flow
+      // const auth = getAuth();
+      // const provider = new GoogleAuthProvider();
+      // signInWithRedirect(auth, provider);
+      return;
+    }
+    // Navigate to payment page, passing hotel AND room info
+    onNavigate('payment', { hotel, room });
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200 flex flex-col sm:flex-row gap-6">
+      <img
+        src={room.image}
+        alt={room.type}
+        className="w-full sm:w-48 h-40 object-cover rounded-lg"
+        onError={(e) => { e.target.src = 'https://placehold.co/300x200/e2e8f0/334155?text=Room'; }}
+      />
+      <div className="flex-1">
+        <h3 className="text-2xl font-bold text-gray-900">{room.type}</h3>
+        <div className="flex items-center space-x-4 text-gray-600 mt-2">
+          <div className="flex items-center space-x-1">
+            <UserIcon className="w-5 h-5" />
+            <span>Sleeps {room.capacity}</span>
+          </div>
+          <div className="flex items-center space-x-1">
+            <BedIcon className="w-5 h-5" />
+            <span>{room.type.includes("King") ? "1 King Bed" : room.type.includes("Queen") ? "1 Queen Bed" : "Multiple Beds"}</span>
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col items-start sm:items-end justify-between sm:w-48">
+        <div>
+          <span className="font-bold text-3xl text-blue-600">
+            ${room.price}
+          </span>
+          <span className="text-sm font-normal text-gray-500">/night</span>
+        </div>
+        <button
+          onClick={handleBookRoom}
+          className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 text-lg shadow-lg hover:shadow-xl mt-4 sm:mt-0"
+        >
+          Book Now
+        </button>
+      </div>
+    </div>
+  );
+};
+
+
+// --- UPDATED: Hotel Details Page Component ---
 const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
   const [hotel, setHotel] = useState(null);
+  const [rooms, setRooms] = useState([]); // <-- NEW: State for rooms
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!db || !hotelId) return;
 
-    const fetchHotel = async () => {
+    const fetchHotelAndRooms = async () => {
       setLoading(true);
       try {
+        // 1. Fetch the hotel document
         const hotelDocRef = doc(db, `/artifacts/${appId}/public/data/hotels`, hotelId);
         const docSnap = await getDoc(hotelDocRef);
 
@@ -704,24 +823,26 @@ const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
           setHotel({ id: docSnap.id, ...docSnap.data() });
         } else {
           console.error("No such hotel found!");
+          setLoading(false);
+          return;
         }
+        
+        // 2. Fetch the rooms sub-collection
+        const roomsColRef = collection(db, `/artifacts/${appId}/public/data/hotels`, hotelId, "rooms");
+        const roomsQuery = query(roomsColRef);
+        const roomsSnapshot = await getDocs(roomsQuery);
+        
+        const roomsData = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setRooms(roomsData);
+        
       } catch (error) {
-        console.error("Error fetching hotel details:", error);
+        console.error("Error fetching hotel details or rooms:", error);
       }
       setLoading(false);
     };
 
-    fetchHotel();
+    fetchHotelAndRooms();
   }, [db, appId, hotelId]);
-
-  const handleBookNow = () => {
-    if (!user) {
-      alert("Please sign in to book this hotel.");
-      return;
-    }
-    // Navigate to the payment page, passing the hotel info
-    onNavigate('payment', { hotel });
-  };
   
   if (loading) {
     return (
@@ -755,6 +876,7 @@ const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
           &larr; Back to Home
         </button>
 
+        {/* Hotel Info Section */}
         <div className="mb-8">
           <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-2">{hotel.name}</h1>
           <p className="text-lg text-gray-600">{hotel.location}</p>
@@ -775,7 +897,7 @@ const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
             </p>
 
             <h2 className="text-3xl font-bold text-gray-900 mb-6">What this place offers</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 mb-12">
               {hotel.amenities && hotel.amenities.length > 0 ? (
                 hotel.amenities.map((amenity, index) => (
                   <div key={index} className="flex items-center space-x-3">
@@ -787,27 +909,55 @@ const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
                 <p className="text-gray-600">No amenities listed.</p>
               )}
             </div>
+            
+            {/* --- NEW: Available Rooms Section --- */}
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">Select a Room</h2>
+            <div className="space-y-6">
+              {rooms.length > 0 ? (
+                rooms.map(room => (
+                  <RoomCard 
+                    key={room.id}
+                    hotel={hotel} 
+                    room={room} 
+                    onNavigate={onNavigate} 
+                    user={user} 
+                  />
+                ))
+              ) : (
+                <p className="text-gray-600">No rooms available for this hotel at the moment.</p>
+              )}
+            </div>
           </div>
 
           <div className="lg:col-span-1">
             <div className="sticky top-24 bg-gray-50 p-6 rounded-xl shadow-lg border border-gray-200">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">Hotel Info</h3>
               <div className="flex justify-between items-center mb-6">
-                <span className="font-bold text-3xl text-blue-600">
+                <span className="font-semibold text-lg text-gray-700">
+                  Price starts from
+                </span>
+                <span className="font-bold text-2xl text-blue-600">
                   ${hotel.price}
-                  <span className="text-base font-normal text-gray-500">/night</span>
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                 <span className="font-semibold text-lg text-gray-700">
+                  Rating
                 </span>
                 <span className="bg-yellow-400 text-yellow-900 font-bold px-4 py-2 rounded-full text-lg flex items-center space-x-1">
                   <StarIcon className="w-5 h-5" />
                   <span>{hotel.rating}</span>
                 </span>
               </div>
-
-              <button
+              
+              {/* This "Book Now" button is removed, as booking is per-room now */}
+              {/* <button
                 onClick={handleBookNow}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-lg hover:shadow-xl"
               >
                 Book Now
               </button>
+              */}
             </div>
           </div>
         </div>
@@ -816,7 +966,7 @@ const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
   );
 };
 
-// --- NEW: About Page Component ---
+// --- About Page Component ---
 const AboutPage = () => (
   <div className="py-16 sm:py-24 bg-white">
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl">
@@ -834,7 +984,7 @@ const AboutPage = () => (
   </div>
 );
 
-// --- NEW: My Bookings Page Component ---
+// --- UPDATED: My Bookings Page Component ---
 const MyBookingsPage = ({ db, appId, user, onSelectHotel }) => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -885,22 +1035,25 @@ const MyBookingsPage = ({ db, appId, user, onSelectHotel }) => {
         {bookings.length > 0 ? (
           <div className="space-y-6">
             {bookings.map(booking => (
-              <div key={booking.id} className="bg-white p-6 rounded-xl shadow-lg flex items-center space-x-6">
+              <div key={booking.id} className="bg-white p-6 rounded-xl shadow-lg flex flex-col sm:flex-row items-start sm:items-center sm:space-x-6">
                 <img 
                   src={booking.hotel.image} 
                   alt={booking.hotel.name}
-                  className="w-32 h-32 object-cover rounded-lg"
+                  className="w-full sm:w-32 h-40 sm:h-32 object-cover rounded-lg"
                   onError={(e) => { e.target.src = 'https://placehold.co/150x150/e2e8f0/334155?text=Hotel'; }}
                 />
-                <div className="flex-1">
+                <div className="flex-1 mt-4 sm:mt-0">
                   <h2 className="text-2xl font-bold text-gray-900">{booking.hotel.name}</h2>
+                  {/* UPDATED: Show room type */}
+                  <p className="text-lg font-semibold text-blue-700">{booking.room.type}</p>
                   <p className="text-gray-600">{booking.hotel.location}</p>
-                  <p className="text-gray-800 mt-2 font-semibold">${booking.hotel.price}/night</p>
+                  {/* UPDATED: Show room price */}
+                  <p className="text-gray-800 mt-2 font-semibold">${booking.room.price}/night</p>
                   <p className="text-sm text-gray-500 mt-1">Booked on: {booking.bookedOn}</p>
                 </div>
                 <button 
                   onClick={() => onSelectHotel(booking.hotel.id)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors mt-4 sm:mt-0 w-full sm:w-auto"
                 >
                   View Hotel
                 </button>
@@ -915,16 +1068,17 @@ const MyBookingsPage = ({ db, appId, user, onSelectHotel }) => {
   );
 };
 
-// --- NEW: Payment Page Component ---
+// --- UPDATED: Payment Page Component ---
 const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [cardDetails, setCardDetails] = useState({ number: '', expiry: '', cvc: '', name: '' });
 
-  if (!bookingDetails || !bookingDetails.hotel) {
+  // UPDATED: Now requires hotel AND room
+  if (!bookingDetails || !bookingDetails.hotel || !bookingDetails.room) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <p className="text-lg text-red-600 mb-4">Error: No hotel selected for booking.</p>
+        <p className="text-lg text-red-600 mb-4">Error: No room selected for booking.</p>
         <button
           onClick={() => onNavigate('home')}
           className="font-medium text-blue-600 hover:text-blue-800 transition-colors"
@@ -935,7 +1089,7 @@ const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
     );
   }
 
-  const { hotel } = bookingDetails;
+  const { hotel, room } = bookingDetails;
   
   const handleInputChange = (e) => {
     setCardDetails({ ...cardDetails, [e.target.name]: e.target.value });
@@ -951,10 +1105,9 @@ const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
     setIsProcessing(true);
     setErrorMessage('');
 
-    // --- This is a FAKE payment simulation ---
-    // In a real app, you would use Stripe, Braintree, etc.
+    // --- FAKE payment simulation ---
     await new Promise(resolve => setTimeout(resolve, 1500));
-    // --- End of fake simulation ---
+    // --- End of simulation ---
 
     try {
       // Payment "succeeded", now create the booking in Firestore
@@ -966,8 +1119,13 @@ const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
           id: hotel.id,
           name: hotel.name,
           location: hotel.location,
-          price: hotel.price,
           image: hotel.image
+        },
+        room: { // <-- NEW: Store room info
+          id: room.id,
+          type: room.type,
+          price: room.price,
+          capacity: room.capacity
         },
         bookedOn: serverTimestamp(),
         status: "confirmed"
@@ -994,17 +1152,21 @@ const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
           <div className="bg-white p-8 rounded-xl shadow-lg">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Order Summary</h2>
             <img 
-              src={hotel.image} 
-              alt={hotel.name}
+              src={room.image} // <-- Use room image
+              alt={room.type}
               className="w-full h-48 object-cover rounded-lg mb-4"
-              onError={(e) => { e.target.src = 'https://placehold.co/400x300/e2e8f0/334155?text=Hotel'; }}
+              onError={(e) => { e.target.src = 'https://placehold.co/400x300/e2e8f0/334155?text=Room'; }}
             />
             <h3 className="text-xl font-semibold text-gray-800">{hotel.name}</h3>
+            {/* UPDATED: Show room type */}
+            <p className="text-lg font-semibold text-blue-700">{room.type}</p>
             <p className="text-gray-600 mb-4">{hotel.location}</p>
+            
             <div className="border-t border-gray-200 pt-4 space-y-2">
               <div className="flex justify-between">
-                <span className="text-gray-600">Price per night</span>
-                <span className="font-semibold text-gray-900">${hotel.price}</span>
+                <span className="text-gray-600">Room price per night</span>
+                {/* UPDATED: Show room price */}
+                <span className="font-semibold text-gray-900">${room.price}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Nights (Assumed)</span>
@@ -1012,7 +1174,8 @@ const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
               </div>
               <div className="flex justify-between text-xl font-bold text-gray-900 mt-4 border-t pt-4">
                 <span>Total</span>
-                <span>${hotel.price}</span>
+                {/* UPDATED: Show room price */}
+                <span>${room.price}</span>
               </div>
             </div>
           </div>
@@ -1052,7 +1215,8 @@ const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
                 disabled={isProcessing}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400"
               >
-                {isProcessing ? "Processing..." : `Pay $${hotel.price}`}
+                {/* UPDATED: Show room price */}
+                {isProcessing ? "Processing..." : `Pay $${room.price}`}
               </button>
             </form>
           </div>
@@ -1125,7 +1289,7 @@ export default function App() {
     }
   }, []); // Empty array ensures this runs only once
 
-  // --- NEW Navigation Function ---
+  // --- Navigation Function ---
   const handleNavigate = (targetPage, data = {}) => {
     setPage(targetPage);
     setPageData(data);
