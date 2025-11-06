@@ -33,16 +33,16 @@ let viteFirebaseConfig = undefined;
 let viteAppId = undefined;
 let viteInitialAuthToken = undefined;
 
-// Check for the preview environment's global variable first.
-// This avoids touching import.meta in the preview compiler, which causes the warning.
-if (typeof __firebase_config !== 'undefined') {
-    // We are in the preview environment, do nothing here.
-} else if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
-    // We are in the Vite/Netlify environment
+// Check if we are in the preview environment
+if (typeof __firebase_config === 'undefined') {
+    // We are NOT in the preview env, so we must be in Vite/Netlify.
+    // It's safe to use import.meta here.
     viteFirebaseConfig = import.meta.env.VITE_FIREBASE_CONFIG;
     viteAppId = import.meta.env.VITE_APP_ID;
     viteInitialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
 }
+// If __firebase_config *is* defined (preview env), these variables will
+// just stay `undefined`, which is the correct behavior.
 
 let fallbackFirebaseConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : undefined;
 let fallbackAppId = typeof __app_id !== 'undefined' ? __app_id : undefined;
@@ -1023,23 +1023,23 @@ const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
             <form onSubmit={handleSubmitPayment} className="space-y-4">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Name on Card</label>
-                <input type="text" name="name" id="name" className="w-full p-3 border border-gray-300 rounded-lg" value={cardDetails.name} onChange={handleInputChange} />
+                <input type="text" name="name" id="name" className="w-full p-3 border border-gray-300 rounded-lg text-gray-900" value={cardDetails.name} onChange={handleInputChange} />
               </div>
               <div>
                 <label htmlFor="number" className="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
                 <div className="relative">
-                  <input type="text" name="number" id="number" className="w-full p-3 border border-gray-300 rounded-lg pl-10" value={cardDetails.number} onChange={handleInputChange} placeholder="0000 0000 0000 0000" />
+                  <input type="text" name="number" id="number" className="w-full p-3 border border-gray-300 rounded-lg pl-10 text-gray-900" value={cardDetails.number} onChange={handleInputChange} placeholder="0000 0000 0000 0000" />
                   <CreditCardIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="expiry" className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
-                  <input type="text" name="expiry" id="expiry" className="w-full p-3 border border-gray-300 rounded-lg" value={cardDetails.expiry} onChange={handleInputChange} placeholder="MM / YY" />
+                  <input type="text" name="expiry" id="expiry" className="w-full p-3 border border-gray-300 rounded-lg text-gray-900" value={cardDetails.expiry} onChange={handleInputChange} placeholder="MM / YY" />
                 </div>
                 <div>
                   <label htmlFor="cvc" className="block text-sm font-medium text-gray-700 mb-1">CVC</label>
-                  <input type="text" name="cvc" id="cvc" className="w-full p-3 border border-gray-300 rounded-lg" value={cardDetails.cvc} onChange={handleInputChange} placeholder="123" />
+                  <input type="text" name="cvc" id="cvc" className="w-full p-3 border border-gray-300 rounded-lg text-gray-900" value={cardDetails.cvc} onChange={handleInputChange} placeholder="123" />
                 </div>
               </div>
               
