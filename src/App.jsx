@@ -8,46 +8,48 @@ import {
   onAuthStateChanged, 
   GoogleAuthProvider, 
   signInWithPopup, 
-  signOut 
+  signOut,
+  getRedirectResult, // <-- NEW: For handling sign-in more reliably
+  signInWithRedirect
 } from 'firebase/auth';
 import { 
   getFirestore, 
   collection, 
   doc, 
-  addDoc, 
+  getDoc,
   getDocs,
   onSnapshot,
   query, 
   where,
   limit,
   writeBatch,
+  addDoc, // <-- NEW: For adding bookings
+  serverTimestamp, // <-- NEW: For booking dates
   setLogLevel
 } from 'firebase/firestore';
 
 // --- Firebase Config ---
-// Read from Vite's environment variables (populated by Netlify)
-// You MUST set these in your Netlify Build & Deploy settings
+let viteFirebaseConfig = undefined;
+let viteAppId = undefined;
+let viteInitialAuthToken = undefined;
 
-// Vite/Netlify variables (used by Netlify)
-let viteFirebaseConfig = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_FIREBASE_CONFIG : undefined;
-let viteAppId = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_APP_ID : undefined;
-let viteInitialAuthToken = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_INITIAL_AUTH_TOKEN : undefined;
+if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
+  viteFirebaseConfig = import.meta.env.VITE_FIREBASE_CONFIG;
+  viteAppId = import.meta.env.VITE_APP_ID;
+  viteInitialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
+}
 
-// Fallback variables (used for local preview)
 let fallbackFirebaseConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : undefined;
 let fallbackAppId = typeof __app_id !== 'undefined' ? __app_id : undefined;
 let fallbackInitialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
 
-// Prioritize Vite variables for Netlify, but use fallbacks for preview
 const firebaseConfigString = viteFirebaseConfig || fallbackFirebaseConfig;
 const appId = viteAppId || fallbackAppId || 'default-app-id';
 const initialAuthToken = viteInitialAuthToken || fallbackInitialAuthToken;
 
 const firebaseConfig = firebaseConfigString ? JSON.parse(firebaseConfigString) : {};
 
-
 // --- SVG Icons ---
-// ... (Icons are unchanged, so hiding for brevity) ...
 const MenuIcon = ({ className = "w-6 h-6" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -74,15 +76,56 @@ const ClockIcon = ({ className = "w-12 h-12 mx-auto text-blue-600 mb-4" }) => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
+const WifiIcon = ({ className = "w-5 h-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856a9.75 9.75 0 0113.788 0M1.923 8.674a14.25 14.25 0 0120.154 0M12 18.375a.375.375 0 110-.75.375.375 0 010 .75z" />
+  </svg>
+);
+const SparklesIcon = ({ className = "w-5 h-5" }) => ( // Using Sparkles for 'Spa'
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.475-2.475L14.25 6l1.036-.259a3.375 3.375 0 002.475-2.475L18 2.25l.259 1.035a3.375 3.375 0 002.475 2.475L21.75 6l-1.035.259a3.375 3.375 0 00-2.475 2.475z" />
+  </svg>
+);
+const BuildingIcon = ({ className = "w-5 h-5" }) => ( // Using Building for 'Gym'
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18M18.75 3v18M9 6.75h6M9 12h6m-6 5.25h6M4.5 21h15" />
+  </svg>
+);
+const WaterIcon = ({ className = "w-5 h-5" }) => ( // Using Water drop for 'Pool'
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214a.818.818 0 01.432 1.205l-4.266 7.42a.818.818 0 01-1.42 0l-4.266-7.42a.818.818 0 01.432-1.205A11.96 11.96 0 0112 3c1.94 0 3.814.453 5.362 1.214zM12 12.75v6.188a.818.818 0 01-1.22 0v-6.188" />
+  </svg>
+);
+const StarIcon = ({ className = "w-5 h-5 text-yellow-400" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={className}>
+    <path fillRule="evenodd" d="M10.868 2.884c.321-.662 1.135-.662 1.456 0l1.82 3.75 4.12 1.013c.72.176 1.006.993.486 1.488l-3.23 3.148.86 4.545c.12 1.054-.87 1.848-1.84 1.353l-3.928-2.065-3.928 2.065c-.97.495-1.96-.299-1.84-1.353l.86-4.545-3.23-3.148c-.52-.495-.234-1.312.486-1.488l4.12-1.013 1.82-3.75z" clipRule="evenodd" />
+  </svg>
+);
+// NEW: Credit Card Icon for Payment
+const CreditCardIcon = ({ className = "w-5 h-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h6M3 17.25l1.5-1.5M15 17.25l1.5-1.5M16.5 12h.008v.008h-.008V12z" />
+    <path d="M2.25 6.75C2.25 5.64543 3.14543 4.75 4.25 4.75H19.75C20.8546 4.75 21.75 5.64543 21.75 6.75V17.25C21.75 18.3546 20.8546 19.25 19.75 19.25H4.25C3.14543 19.25 2.25 18.3546 2.25 17.25V6.75Z" strokeWidth="1.5" />
+  </svg>
+);
+// NEW: Calendar Icon for Bookings
+const CalendarIcon = ({ className = "w-5 h-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+  </svg>
+);
+
 
 // --- Header Component ---
-const Header = ({ isMenuOpen, setIsMenuOpen, auth, user }) => {
-  // ... (Component code is unchanged) ...
+const Header = ({ isMenuOpen, setIsMenuOpen, auth, user, onNavigate }) => {
+  
+  // NEW SIGN-IN FIX: Use signInWithRedirect
+  // This avoids pop-up blockers entirely.
   const handleSignIn = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      // User state will be updated by onAuthStateChanged listener in App
+      // This will redirect the user to Google's sign-in page
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
     }
@@ -91,7 +134,7 @@ const Header = ({ isMenuOpen, setIsMenuOpen, auth, user }) => {
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      // User state will be updated by onAuthStateChanged listener in App
+      onNavigate('home'); // Go to home page after sign out
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -103,24 +146,27 @@ const Header = ({ isMenuOpen, setIsMenuOpen, auth, user }) => {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div className="flex-shrink-0 flex items-center">
-            <a href="#" className="text-2xl font-bold text-blue-600">
+            <button onClick={() => onNavigate('home')} className="text-2xl font-bold text-blue-600">
               StayScout
-            </a>
+            </button>
           </div>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex md:items-center md:space-x-8">
-            <a href="#" className="font-medium text-gray-700 hover:text-blue-600 transition-colors">Home</a>
-            <a href="#" className="font-medium text-gray-500 hover:text-blue-600 transition-colors">Hotels</a>
-            <a href="#" className="font-medium text-gray-500 hover:text-blue-600 transition-colors">Deals</a>
-            <a href="#" className="font-medium text-gray-500 hover:text-blue-600 transition-colors">About</a>
+            <button onClick={() => onNavigate('home')} className="font-medium text-gray-700 hover:text-blue-600 transition-colors">Home</button>
+            <button onClick={() => onNavigate('searchResults', { destination: 'All' })} className="font-medium text-gray-500 hover:text-blue-600 transition-colors">Hotels</button>
+            {/* NEW: Show My Bookings if logged in */}
+            {user && (
+              <button onClick={() => onNavigate('bookings')} className="font-medium text-gray-500 hover:text-blue-600 transition-colors">My Bookings</button>
+            )}
+            <button onClick={() => onNavigate('about')} className="font-medium text-gray-500 hover:text-blue-600 transition-colors">About</button>
           </div>
 
           {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center space-x-2">
             {user ? (
               <>
-                <span className="text-gray-700 text-sm hidden lg:block">Hi, {user.displayName || user.email || 'Friend'}!</span>
+                <span className="text-gray-700 text-sm hidden lg:block">Hi, {user.displayName || 'Friend'}!</span>
                 <button
                   onClick={handleSignOut}
                   className="font-medium text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md transition-colors"
@@ -166,10 +212,12 @@ const Header = ({ isMenuOpen, setIsMenuOpen, auth, user }) => {
       {/* Mobile Menu */}
       <div className={`${isMenuOpen ? 'block' : 'hidden'} md:hidden absolute top-16 inset-x-0 bg-white shadow-lg z-20`} id="mobile-menu">
         <div className="pt-2 pb-3 space-y-1 px-2">
-          <a href="#" className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 transition-colors">Home</a>
-          <a href="#" className="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:text-blue-600 hover:bg-gray-50 transition-colors">Hotels</a>
-          <a href="#" className="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:text-blue-600 hover:bg-gray-50 transition-colors">Deals</a>
-          <a href="#" className="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:text-blue-600 hover:bg-gray-50 transition-colors">About</a>
+          <button onClick={() => { onNavigate('home'); setIsMenuOpen(false); }} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 transition-colors">Home</button>
+          <button onClick={() => { onNavigate('searchResults', { destination: 'All' }); setIsMenuOpen(false); }} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:text-blue-600 hover:bg-gray-50 transition-colors">Hotels</button>
+          {user && (
+            <button onClick={() => { onNavigate('bookings'); setIsMenuOpen(false); }} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:text-blue-600 hover:bg-gray-50 transition-colors">My Bookings</button>
+          )}
+          <button onClick={() => { onNavigate('about'); setIsMenuOpen(false); }} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:text-blue-600 hover:bg-gray-50 transition-colors">About</button>
         </div>
         <div className="pt-4 pb-3 border-t border-gray-200 px-2">
           <div className="flex flex-col space-y-2">
@@ -205,23 +253,19 @@ const Header = ({ isMenuOpen, setIsMenuOpen, auth, user }) => {
 
 // --- Booking Form Component ---
 const BookingForm = ({ onSearch }) => {
-  // ... (Component code is unchanged) ...
   const [destination, setDestination] = useState("");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [guests, setGuests] = useState(1);
-
   const today = new Date().toISOString().split('T')[0];
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Pass search criteria to parent component
-    onSearch({
-      destination,
-      checkIn,
-      checkOut,
-      guests,
-    });
+    if (!destination) {
+      alert("Please enter a destination."); // Using alert here for simplicity, but a modal would be better
+      return;
+    }
+    onSearch({ destination, checkIn, checkOut, guests });
   };
 
   return (
@@ -230,7 +274,6 @@ const BookingForm = ({ onSearch }) => {
       className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl mt-8 max-w-5xl mx-auto"
     >
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-        {/* Destination */}
         <div className="lg:col-span-2">
           <label htmlFor="destination" className="block text-sm font-medium text-gray-700 mb-1">
             Destination
@@ -242,11 +285,8 @@ const BookingForm = ({ onSearch }) => {
             onChange={(e) => setDestination(e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
             placeholder="e.g., Miami, Florida"
-            required
           />
         </div>
-        
-        {/* Check-in */}
         <div>
           <label htmlFor="check-in" className="block text-sm font-medium text-gray-700 mb-1">
             Check-in
@@ -258,11 +298,8 @@ const BookingForm = ({ onSearch }) => {
             onChange={(e) => setCheckIn(e.target.value)}
             min={today}
             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-            required
           />
         </div>
-        
-        {/* Check-out */}
         <div>
           <label htmlFor="check-out" className="block text-sm font-medium text-gray-700 mb-1">
             Check-out
@@ -274,11 +311,8 @@ const BookingForm = ({ onSearch }) => {
             onChange={(e) => setCheckOut(e.target.value)}
             min={checkIn || today}
             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-            required
           />
         </div>
-        
-        {/* Guests */}
         <div className="md:col-span-1 lg:col-span-1">
            <label htmlFor="guests" className="block text-sm font-medium text-gray-700 mb-1">
             Guests
@@ -290,11 +324,8 @@ const BookingForm = ({ onSearch }) => {
             onChange={(e) => setGuests(e.target.value)}
             min="1"
             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-            required
           />
         </div>
-
-        {/* Search Button */}
         <div className="md:col-span-2 lg:col-span-1">
           <button
             type="submit"
@@ -310,7 +341,6 @@ const BookingForm = ({ onSearch }) => {
 
 // --- Hero Component ---
 const Hero = ({ onSearch }) => {
-  // ... (Component code is unchanged) ...
   return (
     <section className="bg-gradient-to-r from-blue-600 to-teal-500 text-white">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 text-center">
@@ -327,10 +357,12 @@ const Hero = ({ onSearch }) => {
 };
 
 // --- Hotel Card Component ---
-const HotelCard = ({ hotel }) => {
-  // ... (Component code is unchanged) ...
+const HotelCard = ({ hotel, onSelectHotel }) => {
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
+    <button 
+      onClick={() => onSelectHotel(hotel.id)} 
+      className="bg-white rounded-xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 text-left w-full"
+    >
       <img 
         className="w-full h-56 object-cover" 
         src={hotel.image} 
@@ -345,18 +377,18 @@ const HotelCard = ({ hotel }) => {
             ${hotel.price}
             <span className="text-sm font-normal text-gray-500">/night</span>
           </span>
-          <span className="bg-yellow-400 text-yellow-900 font-bold px-3 py-1 rounded-full text-sm">
-            ★ {hotel.rating}
+          <span className="bg-yellow-400 text-yellow-900 font-bold px-3 py-1 rounded-full text-sm flex items-center space-x-1">
+            <StarIcon className="w-4 h-4" />
+            <span>{hotel.rating}</span>
           </span>
         </div>
       </div>
-    </div>
+    </button>
   );
 };
 
 // --- Add Sample Hotels Button ---
 const AddSampleHotelsButton = ({ db, appId }) => {
-  // ... (Component code is unchanged) ...
   const [isAdding, setIsAdding] = useState(false);
   const [isDone, setIsDone] = useState(false);
 
@@ -367,6 +399,8 @@ const AddSampleHotelsButton = ({ db, appId }) => {
       price: 299,
       rating: 4.8,
       image: "https://placehold.co/600x400/60a5fa/ffffff?text=Grand+Resort",
+      description: "Experience the ultimate luxury at The Grand Resort, located on the beautiful shores of Miami. Enjoy breathtaking ocean views, world-class dining, and an unforgettable stay.",
+      amenities: ["Pool", "Wi-Fi", "Gym", "Spa", " beachfront"]
     },
     {
       name: "Mountain View Lodge",
@@ -374,6 +408,8 @@ const AddSampleHotelsButton = ({ db, appId }) => {
       price: 349,
       rating: 4.9,
       image: "https://placehold.co/600x400/818cf8/ffffff?text=Mountain+Lodge",
+      description: "Nestled in the heart of the Rocky Mountains, the Mountain View Lodge offers stunning vistas and cozy, luxurious accommodations. Perfect for a ski trip or a summer getaway.",
+      amenities: ["Wi-Fi", "Gym", "Spa", "Ski-in/Ski-out"]
     },
     {
       name: "Urban Oasis Hotel",
@@ -381,6 +417,8 @@ const AddSampleHotelsButton = ({ db, appId }) => {
       price: 249,
       rating: 4.7,
       image: "https://placehold.co/600x400/a78bfa/ffffff?text=Urban+Oasis",
+      description: "An oasis of calm in the middle of the bustling city. The Urban Oasis Hotel provides a chic, modern retreat with easy access to all major attractions.",
+      amenities: ["Pool", "Wi-Fi", "Gym", "Rooftop Bar"]
     },
   ];
 
@@ -391,7 +429,7 @@ const AddSampleHotelsButton = ({ db, appId }) => {
       const batch = writeBatch(db);
       
       mockHotels.forEach((hotel) => {
-        const docRef = doc(hotelsColRef); // Create a new doc with a random ID
+        const docRef = doc(hotelsColRef);
         batch.set(docRef, hotel);
       });
       
@@ -420,10 +458,8 @@ const AddSampleHotelsButton = ({ db, appId }) => {
   );
 };
 
-
 // --- Featured Hotels Component ---
-const FeaturedHotels = ({ db, appId }) => {
-  // ... (Component code is unchanged) ...
+const FeaturedHotels = ({ db, appId, onSelectHotel }) => {
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -432,7 +468,6 @@ const FeaturedHotels = ({ db, appId }) => {
 
     setLoading(true);
     const hotelsColRef = collection(db, `/artifacts/${appId}/public/data/hotels`);
-    // Query for 3 hotels to feature
     const q = query(hotelsColRef, limit(3));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -444,7 +479,6 @@ const FeaturedHotels = ({ db, appId }) => {
       setLoading(false);
     });
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, [db, appId]);
 
@@ -459,7 +493,7 @@ const FeaturedHotels = ({ db, appId }) => {
         ) : hotels.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {hotels.map((hotel) => (
-              <HotelCard key={hotel.id} hotel={hotel} />
+              <HotelCard key={hotel.id} hotel={hotel} onSelectHotel={onSelectHotel} />
             ))}
           </div>
         ) : (
@@ -475,7 +509,6 @@ const FeaturedHotels = ({ db, appId }) => {
 
 // --- Features Component ---
 const Features = () => {
-  // ... (Component code is unchanged) ...
   return (
     <section className="py-16 sm:py-24 bg-white">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -512,20 +545,16 @@ const Features = () => {
 
 // --- Footer Component ---
 const Footer = () => {
-  // ... (Component code is unchanged) ...
   return (
     <footer className="bg-gray-800 text-gray-300">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* About */}
           <div>
             <h4 className="text-xl font-bold text-white mb-4">StayScout</h4>
             <p className="text-gray-400">
               Your partner in finding the perfect place to stay, wherever your travels take you.
             </p>
           </div>
-          
-          {/* Quick Links */}
           <div>
             <h5 className="font-semibold text-lg text-white mb-4">Quick Links</h5>
             <ul className="space-y-2">
@@ -535,8 +564,6 @@ const Footer = () => {
               <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
             </ul>
           </div>
-
-          {/* Legal */}
           <div>
             <h5 className="font-semibold text-lg text-white mb-4">Legal</h5>
             <ul className="space-y-2">
@@ -544,8 +571,6 @@ const Footer = () => {
               <li><a href="#" className="hover:text-white transition-colors">Terms of Service</a></li>
             </ul>
           </div>
-          
-          {/* Social */}
           <div>
             <h5 className="font-semibold text-lg text-white mb-4">Follow Us</h5>
             <div className="flex space-x-4">
@@ -555,8 +580,6 @@ const Footer = () => {
             </div>
           </div>
         </div>
-        
-        {/* Copyright */}
         <div className="mt-8 pt-8 border-t border-gray-700 text-center">
           <p className="text-gray-400">&copy; {new Date().getFullYear()} StayScout. All rights reserved.</p>
         </div>
@@ -566,34 +589,36 @@ const Footer = () => {
 };
 
 // --- Home Page Component ---
-const Home = ({ onSearch, db, appId }) => {
-  // ... (Component code is unchanged) ...
+const Home = ({ onSearch, db, appId, onSelectHotel }) => {
   return (
     <>
       <Hero onSearch={onSearch} />
-      <FeaturedHotels db={db} appId={appId} />
+      <FeaturedHotels db={db} appId={appId} onSelectHotel={onSelectHotel} />
       <Features />
     </>
   );
 };
 
 // --- Search Results Page Component ---
-const SearchResults = ({ db, appId, criteria, onGoHome }) => {
-  // ... (Component code is unchanged) ...
+const SearchResults = ({ db, appId, criteria, onGoHome, onSelectHotel }) => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!db || !criteria) return;
+    if (!db) return;
 
     const fetchResults = async () => {
       setLoading(true);
       try {
         const hotelsColRef = collection(db, `/artifacts/${appId}/public/data/hotels`);
-        // Simple query: match location exactly.
-        // Note: Firestore queries are case-sensitive. "Miami, Florida" will not match "miami, florida".
-        // A real app would use a search service or normalized data.
-        const q = query(hotelsColRef, where("location", "==", criteria.destination));
+        let q;
+        if (criteria.destination && criteria.destination !== 'All') {
+          // Specific search
+          q = query(hotelsColRef, where("location", "==", criteria.destination));
+        } else {
+          // "Hotels" link clicked, show all
+          q = query(hotelsColRef);
+        }
         
         const querySnapshot = await getDocs(q);
         const hotelsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -613,7 +638,7 @@ const SearchResults = ({ db, appId, criteria, onGoHome }) => {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-12">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900">
-            Results for "{criteria.destination}"
+            {criteria.destination === 'All' ? "All Hotels" : `Results for "${criteria.destination}"`}
           </h2>
           <button
             onClick={onGoHome}
@@ -628,12 +653,12 @@ const SearchResults = ({ db, appId, criteria, onGoHome }) => {
         ) : results.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {results.map((hotel) => (
-              <HotelCard key={hotel.id} hotel={hotel} />
+              <HotelCard key={hotel.id} hotel={hotel} onSelectHotel={onSelectHotel} />
             ))}
           </div>
         ) : (
           <p className="text-center text-gray-600 text-lg">
-            No hotels found for this location. Try "Miami, Florida", "Aspen, Colorado", or "New York, NY" after adding sample data.
+            No hotels found. Try "Miami, Florida", "Aspen, Colorado", or "New York, NY" after adding sample data.
           </p>
         )}
       </div>
@@ -641,13 +666,404 @@ const SearchResults = ({ db, appId, criteria, onGoHome }) => {
   );
 };
 
+// --- Amenity Icon Helper ---
+const AmenityIcon = ({ name }) => {
+  const iconProps = { className: "w-6 h-6 text-blue-600" };
+  const nameLower = name.toLowerCase();
+
+  if (nameLower.includes('pool')) return <WaterIcon {...iconProps} />;
+  if (nameLower.includes('wi-fi')) return <WifiIcon {...iconProps} />;
+  if (nameLower.includes('gym')) return <BuildingIcon {...iconProps} />;
+  if (nameLower.includes('spa')) return <SparklesIcon {...iconProps} />;
+  
+  // Default icon
+  return <StarIcon className="w-6 h-6 text-blue-600" />;
+};
+
+
+// --- Hotel Details Page Component ---
+const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
+  const [hotel, setHotel] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!db || !hotelId) return;
+
+    const fetchHotel = async () => {
+      setLoading(true);
+      try {
+        const hotelDocRef = doc(db, `/artifacts/${appId}/public/data/hotels`, hotelId);
+        const docSnap = await getDoc(hotelDocRef);
+
+        if (docSnap.exists()) {
+          setHotel({ id: docSnap.id, ...docSnap.data() });
+        } else {
+          console.error("No such hotel found!");
+        }
+      } catch (error) {
+        console.error("Error fetching hotel details:", error);
+      }
+      setLoading(false);
+    };
+
+    fetchHotel();
+  }, [db, appId, hotelId]);
+
+  const handleBookNow = () => {
+    if (!user) {
+      alert("Please sign in to book this hotel.");
+      return;
+    }
+    // Navigate to the payment page, passing the hotel info
+    onNavigate('payment', { hotel });
+  };
+  
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-lg text-gray-600">Loading hotel details...</p>
+      </div>
+    );
+  }
+
+  if (!hotel) {
+    return (
+       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <p className="text-lg text-red-600 mb-4">Error: Hotel not found.</p>
+        <button
+          onClick={() => onNavigate('home')}
+          className="font-medium text-blue-600 hover:text-blue-800 transition-colors"
+        >
+          &larr; Back to Home
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <button
+          onClick={() => onNavigate('home')} // Simple go back home for now
+          className="font-medium text-blue-600 hover:text-blue-800 transition-colors mb-6"
+        >
+          &larr; Back to Home
+        </button>
+
+        <div className="mb-8">
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-2">{hotel.name}</h1>
+          <p className="text-lg text-gray-600">{hotel.location}</p>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+          <div className="lg:col-span-2">
+            <img 
+              className="w-full h-96 object-cover rounded-xl shadow-lg mb-8" 
+              src={hotel.image} 
+              alt={`Main view of ${hotel.name}`}
+              onError={(e) => { e.target.src = 'https://placehold.co/800x600/e2e8f0/334155?text=Image+Not+Available'; }}
+            />
+            
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">About this hotel</h2>
+            <p className="text-gray-700 text-lg leading-relaxed mb-8">
+              {hotel.description || "No description available for this hotel."}
+            </p>
+
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">What this place offers</h2>
+            <div className="grid grid-cols-2 gap-4">
+              {hotel.amenities && hotel.amenities.length > 0 ? (
+                hotel.amenities.map((amenity, index) => (
+                  <div key={index} className="flex items-center space-x-3">
+                    <AmenityIcon name={amenity} />
+                    <span className="text-gray-700 text-lg">{amenity}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-600">No amenities listed.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="lg:col-span-1">
+            <div className="sticky top-24 bg-gray-50 p-6 rounded-xl shadow-lg border border-gray-200">
+              <div className="flex justify-between items-center mb-6">
+                <span className="font-bold text-3xl text-blue-600">
+                  ${hotel.price}
+                  <span className="text-base font-normal text-gray-500">/night</span>
+                </span>
+                <span className="bg-yellow-400 text-yellow-900 font-bold px-4 py-2 rounded-full text-lg flex items-center space-x-1">
+                  <StarIcon className="w-5 h-5" />
+                  <span>{hotel.rating}</span>
+                </span>
+              </div>
+
+              <button
+                onClick={handleBookNow}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-lg hover:shadow-xl"
+              >
+                Book Now
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- NEW: About Page Component ---
+const AboutPage = () => (
+  <div className="py-16 sm:py-24 bg-white">
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl">
+      <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-6 text-center">About StayScout</h1>
+      <p className="text-lg text-gray-700 leading-relaxed mb-4">
+        Welcome to StayScout, your number one partner in finding the perfect accommodation for your travels. We are dedicated to giving you the very best of hotel bookings, with a focus on dependability, customer service, and uniqueness.
+      </p>
+      <p className="text-lg text-gray-700 leading-relaxed mb-4">
+        Founded in 2025, StayScout has come a long way from its beginnings. When we first started out, our passion for easy and reliable travel booking drove us to create this platform. We now serve customers all over the world and are thrilled to be a part of the exciting wing of the travel industry.
+      </p>
+      <p className="text-lg text-gray-700 leading-relaxed">
+        We hope you enjoy our service as much as we enjoy offering it to you. If you have any questions or comments, please don't hesitate to contact us.
+      </p>
+    </div>
+  </div>
+);
+
+// --- NEW: My Bookings Page Component ---
+const MyBookingsPage = ({ db, appId, user, onSelectHotel }) => {
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!db || !user) {
+      setLoading(false);
+      return;
+    };
+
+    const fetchBookings = async () => {
+      setLoading(true);
+      try {
+        const bookingsColRef = collection(db, `/artifacts/${appId}/users/${user.uid}/bookings`);
+        const q = query(bookingsColRef);
+        
+        const querySnapshot = await getDocs(q);
+        const bookingsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Format date for display
+        const formattedBookings = bookingsData.map(b => ({
+          ...b,
+          bookedOn: b.bookedOn?.toDate ? b.bookedOn.toDate().toLocaleDateString() : 'N/A'
+        }));
+        
+        setBookings(formattedBookings);
+      } catch (error) {
+        console.error("Error fetching bookings:", error);
+      }
+      setLoading(false);
+    };
+
+    fetchBookings();
+  }, [db, appId, user]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-lg text-gray-600">Loading your bookings...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="py-16 sm:py-24 bg-gray-50 min-h-[60vh]">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl">
+        <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-12 text-center">My Bookings</h1>
+        {bookings.length > 0 ? (
+          <div className="space-y-6">
+            {bookings.map(booking => (
+              <div key={booking.id} className="bg-white p-6 rounded-xl shadow-lg flex items-center space-x-6">
+                <img 
+                  src={booking.hotel.image} 
+                  alt={booking.hotel.name}
+                  className="w-32 h-32 object-cover rounded-lg"
+                  onError={(e) => { e.target.src = 'https://placehold.co/150x150/e2e8f0/334155?text=Hotel'; }}
+                />
+                <div className="flex-1">
+                  <h2 className="text-2xl font-bold text-gray-900">{booking.hotel.name}</h2>
+                  <p className="text-gray-600">{booking.hotel.location}</p>
+                  <p className="text-gray-800 mt-2 font-semibold">${booking.hotel.price}/night</p>
+                  <p className="text-sm text-gray-500 mt-1">Booked on: {booking.bookedOn}</p>
+                </div>
+                <button 
+                  onClick={() => onSelectHotel(booking.hotel.id)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                >
+                  View Hotel
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-gray-600 text-lg">You have no bookings yet.</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- NEW: Payment Page Component ---
+const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [cardDetails, setCardDetails] = useState({ number: '', expiry: '', cvc: '', name: '' });
+
+  if (!bookingDetails || !bookingDetails.hotel) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <p className="text-lg text-red-600 mb-4">Error: No hotel selected for booking.</p>
+        <button
+          onClick={() => onNavigate('home')}
+          className="font-medium text-blue-600 hover:text-blue-800 transition-colors"
+        >
+          &larr; Back to Home
+        </button>
+      </div>
+    );
+  }
+
+  const { hotel } = bookingDetails;
+  
+  const handleInputChange = (e) => {
+    setCardDetails({ ...cardDetails, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmitPayment = async (e) => {
+    e.preventDefault();
+    if (!cardDetails.number || !cardDetails.expiry || !cardDetails.cvc || !cardDetails.name) {
+      setErrorMessage("Please fill in all card details.");
+      return;
+    }
+    
+    setIsProcessing(true);
+    setErrorMessage('');
+
+    // --- This is a FAKE payment simulation ---
+    // In a real app, you would use Stripe, Braintree, etc.
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    // --- End of fake simulation ---
+
+    try {
+      // Payment "succeeded", now create the booking in Firestore
+      const bookingsColRef = collection(db, `/artifacts/${appId}/users/${user.uid}/bookings`);
+      
+      await addDoc(bookingsColRef, {
+        userId: user.uid,
+        hotel: { // Store a denormalized copy of the hotel info
+          id: hotel.id,
+          name: hotel.name,
+          location: hotel.location,
+          price: hotel.price,
+          image: hotel.image
+        },
+        bookedOn: serverTimestamp(),
+        status: "confirmed"
+      });
+
+      // Redirect to "My Bookings" page
+      onNavigate('bookings');
+
+    } catch (error) {
+      console.error("Error creating booking:", error);
+      setErrorMessage("Payment succeeded, but failed to save booking. Please contact support.");
+    }
+    
+    setIsProcessing(false);
+  };
+
+  return (
+    <div className="py-16 sm:py-24 bg-gray-50 min-h-[70vh]">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl">
+        <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-12 text-center">Complete Your Booking</h1>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+          {/* Order Summary */}
+          <div className="bg-white p-8 rounded-xl shadow-lg">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Order Summary</h2>
+            <img 
+              src={hotel.image} 
+              alt={hotel.name}
+              className="w-full h-48 object-cover rounded-lg mb-4"
+              onError={(e) => { e.target.src = 'https://placehold.co/400x300/e2e8f0/334155?text=Hotel'; }}
+            />
+            <h3 className="text-xl font-semibold text-gray-800">{hotel.name}</h3>
+            <p className="text-gray-600 mb-4">{hotel.location}</p>
+            <div className="border-t border-gray-200 pt-4 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Price per night</span>
+                <span className="font-semibold text-gray-900">${hotel.price}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Nights (Assumed)</span>
+                <span className="font-semibold text-gray-900">1</span>
+              </div>
+              <div className="flex justify-between text-xl font-bold text-gray-900 mt-4 border-t pt-4">
+                <span>Total</span>
+                <span>${hotel.price}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Payment Form */}
+          <div className="bg-white p-8 rounded-xl shadow-lg">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Payment Details</h2>
+            <form onSubmit={handleSubmitPayment} className="space-y-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Name on Card</label>
+                <input type="text" name="name" id="name" className="w-full p-3 border border-gray-300 rounded-lg" value={cardDetails.name} onChange={handleInputChange} />
+              </div>
+              <div>
+                <label htmlFor="number" className="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
+                <div className="relative">
+                  <input type="text" name="number" id="number" className="w-full p-3 border border-gray-300 rounded-lg pl-10" value={cardDetails.number} onChange={handleInputChange} placeholder="0000 0000 0000 0000" />
+                  <CreditCardIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="expiry" className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
+                  <input type="text" name="expiry" id="expiry" className="w-full p-3 border border-gray-300 rounded-lg" value={cardDetails.expiry} onChange={handleInputChange} placeholder="MM / YY" />
+                </div>
+                <div>
+                  <label htmlFor="cvc" className="block text-sm font-medium text-gray-700 mb-1">CVC</label>
+                  <input type="text" name="cvc" id="cvc" className="w-full p-3 border border-gray-300 rounded-lg" value={cardDetails.cvc} onChange={handleInputChange} placeholder="123" />
+                </div>
+              </div>
+              
+              {errorMessage && (
+                <p className="text-red-600 text-sm text-center">{errorMessage}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={isProcessing}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400"
+              >
+                {isProcessing ? "Processing..." : `Pay $${hotel.price}`}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 // --- Main App Component ---
 export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [page, setPage] = useState('home'); // 'home' or 'searchResults'
-  const [searchCriteria, setSearchCriteria] = useState(null);
-
+  const [page, setPage] = useState('home');
+  const [pageData, setPageData] = useState({}); // To pass data between pages
+  
   // Firebase state
   const [app, setApp] = useState(null);
   const [auth, setAuth] = useState(null);
@@ -657,58 +1073,105 @@ export default function App() {
 
   // One-time Firebase Initialization and Auth
   useEffect(() => {
-    // Check if the config string is present and not empty
     if (firebaseConfigString && firebaseConfig.apiKey) {
       const appInstance = initializeApp(firebaseConfig);
       setApp(appInstance);
-      
       const authInstance = getAuth(appInstance);
       setAuth(authInstance);
-      
       const dbInstance = getFirestore(appInstance);
       setDb(dbInstance);
-      
-      // Set log level for debugging
       setLogLevel('Debug');
 
-      const unsubscribe = onAuthStateChanged(authInstance, async (currentUser) => {
-        if (currentUser) {
-          setUser(currentUser);
-          setIsAuthReady(true); // Set auth ready after user is confirmed
-        } else {
-          // No user, sign in with token or anonymously
-          try {
-            if (initialAuthToken) {
-              await signInWithCustomToken(authInstance, initialAuthToken);
-            } else {
-              // Fallback to anonymous sign-in if no token
-              await signInAnonymously(authInstance);
-            }
-            // onAuthStateChanged will run again with the new user
-            // setUser(authInstance.currentUser); // This line is redundant, listener will re-fire
-          } catch (error) {
-            console.error("Error during initial auth:", error);
-            setIsAuthReady(true); // Set ready even if auth fails to stop loading
+      // Check for redirect result from Google Sign-in
+      getRedirectResult(authInstance)
+        .then((result) => {
+          if (result) {
+            // User just signed in via redirect
+            setUser(result.user);
           }
-        }
-        // Moved setIsAuthReady to be more precise
-      });
-
-      return () => unsubscribe(); // Cleanup listener
+        }).catch((error) => {
+          console.error("Error getting redirect result:", error);
+        }).finally(() => {
+          // Listen for auth state changes
+          const unsubscribe = onAuthStateChanged(authInstance, async (currentUser) => {
+            if (currentUser) {
+              setUser(currentUser);
+              setIsAuthReady(true);
+            } else {
+              // No user, try to sign in anonymously
+              try {
+                if (initialAuthToken) {
+                  await signInWithCustomToken(authInstance, initialAuthToken);
+                } else {
+                  await signInAnonymously(authInstance);
+                }
+                setUser(authInstance.currentUser); // Set anonymous user
+              } catch (error) {
+                console.error("Error during initial auth:", error);
+              }
+              setIsAuthReady(true);
+            }
+          });
+          return () => unsubscribe();
+        });
     } else {
-      console.warn("Firebase config (VITE_FIREBASE_CONFIG) is missing or invalid in .env or Netlify settings.");
-      setIsAuthReady(true); // Allow app to render without Firebase
+      console.warn("Firebase config is missing.");
+      setIsAuthReady(true);
     }
   }, []); // Empty array ensures this runs only once
 
-  const handleSearch = (criteria) => {
-    setSearchCriteria(criteria);
-    setPage('searchResults');
+  // --- NEW Navigation Function ---
+  const handleNavigate = (targetPage, data = {}) => {
+    setPage(targetPage);
+    setPageData(data);
+    window.scrollTo(0, 0); // Scroll to top on page change
   };
 
-  const handleGoHome = () => {
-    setPage('home');
-    setSearchCriteria(null);
+  // --- Render Logic ---
+  const renderPage = () => {
+    if (!isAuthReady) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <p className="text-lg text-gray-600">Authenticating...</p>
+        </div>
+      );
+    }
+    if (!db) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh] text-center px-4">
+           <p className="text-lg text-red-600">
+            Failed to connect to the database. <br/>
+            Please ensure <strong>VITE_FIREBASE_CONFIG</strong> is set correctly in your Netlify environment variables.
+          </p>
+        </div>
+      );
+    }
+
+    switch (page) {
+      case 'home':
+        return <Home onSearch={(criteria) => handleNavigate('searchResults', criteria)} db={db} appId={appId} onSelectHotel={(id) => handleNavigate('hotelDetails', { hotelId: id })} />;
+      case 'searchResults':
+        return <SearchResults db={db} appId={appId} criteria={pageData} onGoHome={() => handleNavigate('home')} onSelectHotel={(id) => handleNavigate('hotelDetails', { hotelId: id })} />;
+      case 'hotelDetails':
+        return <HotelDetailsPage db={db} appId={appId} hotelId={pageData.hotelId} onNavigate={handleNavigate} user={user} />;
+      case 'about':
+        return <AboutPage />;
+      case 'bookings':
+        if (!user) {
+          handleNavigate('home'); // Redirect to home if not logged in
+          return null;
+        }
+        return <MyBookingsPage db={db} appId={appId} user={user} onSelectHotel={(id) => handleNavigate('hotelDetails', { hotelId: id })} />;
+      case 'payment':
+        if (!user) {
+          alert("Please sign in to continue.");
+          handleNavigate('home');
+          return null;
+        }
+        return <PaymentPage db={db} appId={appId} user={user} bookingDetails={pageData} onNavigate={handleNavigate} />;
+      default:
+        return <Home onSearch={(criteria) => handleNavigate('searchResults', criteria)} db={db} appId={appId} onSelectHotel={(id) => handleNavigate('hotelDetails', { hotelId: id })} />;
+    }
   };
 
   return (
@@ -718,34 +1181,11 @@ export default function App() {
         setIsMenuOpen={setIsMenuOpen} 
         auth={auth}
         user={user}
+        onNavigate={handleNavigate}
       />
       
       <main className="flex-grow">
-        {!isAuthReady ? (
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <p className="text-lg text-gray-600">Authenticating...</p>
-          </div>
-        ) : !db ? (
-          <div className="flex items-center justify-center min-h-[60vh] text-center px-4">
-             <p className="text-lg text-red-600">
-              Failed to connect to the database. <br/>
-              Please ensure <strong>VITE_FIREBASE_CONFIG</strong> is set correctly in your Netlify environment variables.
-            </p>
-          </div>
-        ) : page === 'home' ? (
-          <Home 
-            onSearch={handleSearch} 
-            db={db} 
-            appId={appId} 
-          />
-        ) : (
-          <SearchResults 
-            db={db} 
-            appId={appId} 
-            criteria={searchCriteria} 
-            onGoHome={handleGoHome}
-          />
-        )}
+        {renderPage()}
       </main>
       
       <Footer />
