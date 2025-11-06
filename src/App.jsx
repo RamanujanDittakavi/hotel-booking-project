@@ -31,12 +31,19 @@ import {
 let viteFirebaseConfig = undefined;
 let viteAppId = undefined;
 let viteInitialAuthToken = undefined;
+let fallbackFirebaseConfig = undefined;
+let fallbackAppId = undefined;
+let fallbackInitialAuthToken = undefined;
 
 // Check if we are in the preview environment
 if (typeof __firebase_config !== 'undefined') {
-    // We are in the preview environment, do nothing here.
-} else if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
-    // We are in the Vite/Netlify environment
+    // We are in the PREVIEW environment.
+    fallbackFirebaseConfig = __firebase_config;
+    fallbackAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    fallbackInitialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
+} else {
+    // We are in the VITE/NETLIFY environment.
+    // This block is skipped by the preview environment.
     viteFirebaseConfig = import.meta.env.VITE_FIREBASE_CONFIG;
     viteAppId = import.meta.env.VITE_APP_ID;
     viteInitialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
@@ -44,17 +51,13 @@ if (typeof __firebase_config !== 'undefined') {
 // If __firebase_config *is* defined (preview env), these variables will
 // just stay `undefined`, which is the correct behavior.
 
-let fallbackFirebaseConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : undefined;
-let fallbackAppId = typeof __app_id !== 'undefined' ? __app_id : undefined;
-let fallbackInitialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
-
 const firebaseConfigString = viteFirebaseConfig || fallbackFirebaseConfig;
 const appId = viteAppId || fallbackAppId || 'default-app-id';
 const initialAuthToken = viteInitialAuthToken || fallbackInitialAuthToken;
 
 const firebaseConfig = firebaseConfigString ? JSON.parse(firebaseConfigString) : {};
 
-// --- SVG Icons ---
+// --- SVG Icons (No changes, hiding for brevity) ---
 const MenuIcon = ({ className = "w-6 h-6" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -117,13 +120,11 @@ const CalendarIcon = ({ className = "w-5 h-5" }) => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
   </svg>
 );
-// NEW: Icon for Rooms
 const BedIcon = ({ className = "w-5 h-5" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.75 6.75h16.5v.75H3.75v-.75z" />
   </svg>
 );
-// NEW: Icon for Guests/Capacity
 const UserIcon = ({ className = "w-5 h-5" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -278,7 +279,8 @@ const BookingForm = ({ onSearch }) => {
       alert("Please enter a destination."); // Using alert here for simplicity, but a modal would be better
       return;
     }
-    onSearch({ destination, checkIn, checkOut, guests });
+    // Pass the trimmed destination to the search function
+    onSearch({ destination: destination.trim(), checkIn, checkOut, guests });
   };
 
   return (
@@ -291,14 +293,14 @@ const BookingForm = ({ onSearch }) => {
           <label htmlFor="destination" className="block text-sm font-medium text-gray-700 mb-1">
             Destination
           </label>
-          {/* FIX: Added text-gray-900 */}
+          {/* FIX: Added text-gray-900 and new placeholder */}
           <input
             type="text"
             id="destination"
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-gray-900"
-            placeholder="e.g., Miami, Florida"
+            placeholder="e.g., Mumbai or Delhi"
           />
         </div>
         <div>
@@ -404,8 +406,62 @@ const HotelCard = ({ hotel, onSelectHotel }) => {
   );
 };
 
-// --- Add Sample Hotels Button ---
-// NEW: This now adds rooms to each hotel
+// --- NEW: Mock Data for Mumbai and Delhi ---
+const mumbaiHotels = [
+  { id: "mum_taj_palace", name: "The Taj Mahal Palace", location: "Mumbai", location_lowercase: "mumbai", price: 450, rating: 4.9, image: "https://placehold.co/600x400/f9a8d4/ffffff?text=Taj+Mumbai", description: "Iconic hotel offering unparalleled luxury and ocean views.", amenities: ["Pool", "Wi-Fi", "Gym", "Spa"],
+    rooms: [
+      { id: "room_taj_std", type: "City View King", price: 450, capacity: 2, image: "https://placehold.co/300x200/f9a8d4/ffffff?text=King+Room" },
+      { id: "room_taj_sea", type: "Sea View Suite", price: 650, capacity: 2, image: "https://placehold.co/300x200/f9a8d4/ffffff?text=Sea+View" }
+    ]},
+  { id: "mum_oberoi", name: "The Oberoi", location: "Mumbai", location_lowercase: "mumbai", price: 420, rating: 4.8, image: "https://placehold.co/600x400/f472b6/ffffff?text=Oberoi+Mumbai", description: "Modern luxury with exceptional service and dining.", amenities: ["Pool", "Wi-Fi", "Gym"],
+    rooms: [
+      { id: "room_oberoi_deluxe", type: "Deluxe Room", price: 420, capacity: 2, image: "https://placehold.co/300x200/f472b6/ffffff?text=Deluxe+Room" },
+      { id: "room_oberoi_suite", type: "Premier Suite", price: 580, capacity: 3, image: "https://placehold.co/300x200/f472b6/ffffff?text=Premier+Suite" }
+    ]},
+  { id: "mum_trident", name: "Trident Nariman Point", location: "Mumbai", location_lowercase: "mumbai", price: 350, rating: 4.7, image: "https://placehold.co/600x400/ec4899/ffffff?text=Trident+Mumbai", description: "Stunning views of the Marine Drive.", amenities: ["Pool", "Wi-Fi", "Spa"],
+    rooms: [
+      { id: "room_trident_std", type: "Standard Double", price: 350, capacity: 2, image: "https://placehold.co/300x200/ec4899/ffffff?text=Standard+Room" }
+    ]},
+  { id: "mum_jw_marriott", name: "JW Marriott Juhu", location: "Mumbai", location_lowercase: "mumbai", price: 380, rating: 4.6, image: "https://placehold.co/600x400/e11d48/ffffff?text=JW+Marriott", description: "Beachfront luxury in the heart of Juhu.", amenities: ["Pool", "Wi-Fi", "Gym", "Spa", "Beachfront"],
+    rooms: [
+      { id: "room_jw_std", type: "Deluxe Guest Room", price: 380, capacity: 2, image: "https://placehold.co/300x200/e11d48/ffffff?text=Deluxe+Guest" },
+      { id: "room_jw_ocean", type: "Ocean View Suite", price: 520, capacity: 2, image: "https://placehold.co/300x200/e11d48/ffffff?text=Ocean+Suite" }
+    ]},
+  { id: "mum_st_regis", name: "The St. Regis", location: "Mumbai", location_lowercase: "mumbai", price: 410, rating: 4.8, image: "https://placehold.co/600x400/db2777/ffffff?text=St+Regis", description: "Sophisticated luxury in Lower Parel.", amenities: ["Pool", "Wi-Fi", "Gym", "Spa"],
+    rooms: [
+      { id: "room_stregis_std", type: "Superior Room", price: 410, capacity: 2, image: "https://placehold.co/300x200/db2777/ffffff?text=Superior+Room" },
+      { id: "room_stregis_suite", type: "St. Regis Suite", price: 600, capacity: 2, image: "https://placehold.co/300x200/db2777/ffffff?text=St+Regis+Suite" }
+    ]}
+];
+
+const delhiHotels = [
+  { id: "del_leela", name: "The Leela Palace", location: "Delhi", location_lowercase: "delhi", price: 430, rating: 4.9, image: "https://placehold.co/600x400/60a5fa/ffffff?text=Leela+Delhi", description: "A modern palace hotel that epitomizes luxury.", amenities: ["Pool", "Wi-Fi", "Gym", "Spa"],
+    rooms: [
+      { id: "room_leela_std", type: "Grande Deluxe Room", price: 430, capacity: 2, image: "https://placehold.co/300x200/60a5fa/ffffff?text=Grande+Deluxe" },
+      { id: "room_leela_suite", type: "Executive Suite", price: 620, capacity: 2, image: "https://placehold.co/300x200/60a5fa/ffffff?text=Exec+Suite" }
+    ]},
+  { id: "del_oberoi", name: "The Oberoi", location: "Delhi", location_lowercase: "delhi", price: 410, rating: 4.8, image: "https://placehold.co/600x400/3b82f6/ffffff?text=Oberoi+Delhi", description: "Contemporary luxury with legendary service.", amenities: ["Pool", "Wi-Fi", "Gym", "Spa"],
+    rooms: [
+      { id: "room_oberoi_del_deluxe", type: "Deluxe Room", price: 410, capacity: 2, image: "https://placehold.co/300x200/3b82f6/ffffff?text=Deluxe+Room" },
+      { id: "room_oberoi_del_suite", type: "Luxury Suite", price: 590, capacity: 3, image: "https://placehold.co/300x200/3b82f6/ffffff?text=Luxury+Suite" }
+    ]},
+  { id: "del_itc_maurya", name: "ITC Maurya", location: "Delhi", location_lowercase: "delhi", price: 360, rating: 4.7, image: "https://placehold.co/600x400/2563eb/ffffff?text=ITC+Maurya", description: "Home to the world-renowned Bukhara restaurant.", amenities: ["Pool", "Wi-Fi", "Gym"],
+    rooms: [
+      { id: "room_itc_std", type: "Executive Club", price: 360, capacity: 2, image: "https://placehold.co/300x200/2563eb/ffffff?text=Exec+Club" }
+    ]},
+  { id: "del_taj_palace", name: "Taj Palace", location: "Delhi", location_lowercase: "delhi", price: 390, rating: 4.6, image: "https://placehold.co/600x400/1d4ed8/ffffff?text=Taj+Palace+Delhi", description: "A perfect blend of world-class service and Indian hospitality.", amenities: ["Pool", "Wi-Fi", "Gym", "Spa"],
+    rooms: [
+      { id: "room_tajdel_std", type: "Superior Room", price: 390, capacity: 2, image: "https://placehold.co/300x200/1d4ed8/ffffff?text=Superior+Room" },
+      { id: "room_tajdel_club", type: "Taj Club Room", price: 510, capacity: 2, image: "https://placehold.co/300x200/1d4ed8/ffffff?text=Taj+Club+Room" }
+    ]},
+  { id: "del_imperial", name: "The Imperial", location: "Delhi", location_lowercase: "delhi", price: 400, rating: 4.8, image: "https://placehold.co/600x400/1e40af/ffffff?text=The+Imperial", description: "A heritage hotel with a rich colonial past.", amenities: ["Pool", "Wi-Fi", "Spa"],
+    rooms: [
+      { id: "room_imperial_std", type: "Heritage Room", price: 400, capacity: 2, image: "https://placehold.co/300x200/1e40af/ffffff?text=Heritage+Room" },
+      { id: "room_imperial_suite", type: "Deco Suite", price: 580, capacity: 2, image: "https://placehold.co/300x200/1e40af/ffffff?text=Deco+Suite" }
+    ]}
+];
+
+// --- NEW: Add Sample Hotels Button (Mumbai & Delhi) ---
 const AddSampleHotelsButton = ({ db, appId }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [isDone, setIsDone] = useState(false);
@@ -416,92 +472,29 @@ const AddSampleHotelsButton = ({ db, appId }) => {
       const hotelsColRef = collection(db, `/artifacts/${appId}/public/data/hotels`);
       const batch = writeBatch(db);
 
-      // --- Hotel 1: The Grand Resort ---
-      const hotel1Id = "grand_resort_miami";
-      const hotel1Ref = doc(hotelsColRef, hotel1Id);
-      batch.set(hotel1Ref, {
-        name: "The Grand Resort",
-        location: "Miami, Florida",
-        price: 299, // Base price
-        rating: 4.8,
-        image: "https://placehold.co/600x400/60a5fa/ffffff?text=Grand+Resort",
-        description: "Experience the ultimate luxury at The Grand Resort, located on the beautiful shores of Miami. Enjoy breathtaking ocean views, world-class dining, and an unforgettable stay.",
-        amenities: ["Pool", "Wi-Fi", "Gym", "Spa", "Beachfront"]
-      });
-      // Rooms for Hotel 1
-      batch.set(doc(hotel1Ref, "rooms", "room_101"), {
-        type: "Standard Queen",
-        price: 299,
-        capacity: 2,
-        image: "https://placehold.co/600x400/60a5fa/ffffff?text=Standard+Queen"
-      });
-      batch.set(doc(hotel1Ref, "rooms", "room_102"), {
-        type: "Oceanfront King Suite",
-        price: 459,
-        capacity: 2,
-        image: "https://placehold.co/600x400/60a5fa/ffffff?text=King+Suite"
-      });
-      batch.set(doc(hotel1Ref, "rooms", "room_103"), {
-        type: "Family Room (2 Doubles)",
-        price: 399,
-        capacity: 4,
-        image: "https://placehold.co/600x400/60a5fa/ffffff?text=Family+Room"
-      });
+      const allHotels = [...mumbaiHotels, ...delhiHotels];
 
-      // --- Hotel 2: Mountain View Lodge ---
-      const hotel2Id = "mountain_lodge_aspen";
-      const hotel2Ref = doc(hotelsColRef, hotel2Id);
-      batch.set(hotel2Ref, {
-        name: "Mountain View Lodge",
-        location: "Aspen, Colorado",
-        price: 349,
-        rating: 4.9,
-        image: "https://placehold.co/600x400/818cf8/ffffff?text=Mountain+Lodge",
-        description: "Nestled in the heart of the Rocky Mountains, the Mountain View Lodge offers stunning vistas and cozy, luxurious accommodations. Perfect for a ski trip or a summer getaway.",
-        amenities: ["Wi-Fi", "Gym", "Spa", "Ski-in/Ski-out"]
-      });
-      // Rooms for Hotel 2
-      batch.set(doc(hotel2Ref, "rooms", "room_201"), {
-        type: "Cozy King",
-        price: 349,
-        capacity: 2,
-        image: "https://placehold.co/600x400/818cf8/ffffff?text=Cozy+King"
-      });
-      batch.set(doc(hotel2Ref, "rooms", "room_202"), {
-        type: "Mountain-View Suite",
-        price: 599,
-        capacity: 4,
-        image: "https://placehold.co/600x400/818cf8/ffffff?text=Mountain+Suite"
-      });
+      allHotels.forEach((hotel) => {
+        // Get a reference to the new hotel doc
+        const hotelDocRef = doc(hotelsColRef, hotel.id);
+        
+        // Separate rooms from hotel data
+        const { rooms, ...hotelData } = hotel;
+        
+        // Set the hotel data
+        batch.set(hotelDocRef, hotelData);
 
-      // --- Hotel 3: Urban Oasis Hotel ---
-      const hotel3Id = "urban_oasis_nyc";
-      const hotel3Ref = doc(hotelsColRef, hotel3Id);
-      batch.set(hotel3Ref, {
-        name: "Urban Oasis Hotel",
-        location: "New York, NY",
-        price: 249,
-        rating: 4.7,
-        image: "https://placehold.co/600x400/a78bfa/ffffff?text=Urban+Oasis",
-        description: "An oasis of calm in the middle of the bustling city. The Urban Oasis Hotel provides a chic, modern retreat with easy access to all major attractions.",
-        amenities: ["Pool", "Wi-Fi", "Gym", "Rooftop Bar"]
-      });
-      // Rooms for Hotel 3
-      batch.set(doc(hotel3Ref, "rooms", "room_301"), {
-        type: "City-View Queen",
-        price: 249,
-        capacity: 2,
-        image: "https://placehold.co/600x400/a78bfa/ffffff?text=City+Queen"
-      });
-      batch.set(doc(hotel3Ref, "rooms", "room_302"), {
-        type: "The Penthouse",
-        price: 799,
-        capacity: 2,
-        image: "https://placehold.co/600x400/a78bfa/ffffff?text=Penthouse"
+        // Add rooms to the 'rooms' subcollection
+        if (rooms && rooms.length > 0) {
+          rooms.forEach((room) => {
+            const roomDocRef = doc(hotelDocRef, "rooms", room.id);
+            batch.set(roomDocRef, room);
+          });
+        }
       });
 
       await batch.commit();
-      console.log("Sample hotels and rooms added successfully!");
+      console.log("Sample hotels and rooms for Mumbai & Delhi added successfully!");
       setIsDone(true);
     } catch (error) {
       console.error("Error adding sample hotels:", error);
@@ -516,16 +509,18 @@ const AddSampleHotelsButton = ({ db, appId }) => {
         disabled={isAdding || isDone}
         className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors disabled:bg-gray-400"
       >
-        {isDone ? "Sample Hotels & Rooms Added!" : isAdding ? "Adding..." : "Add Sample Hotels & Rooms"}
+        {isDone ? "Mumbai & Delhi Hotels Added!" : isAdding ? "Adding..." : "Add Mumbai & Delhi Hotels"}
       </button>
       <p className="text-sm text-gray-600 mt-2">
-        Click this button once to populate the database with hotels and their available rooms.
+        Click this button once to populate the database with 10 hotels and their rooms.
       </p>
     </div>
   );
 };
 
+
 // --- Featured Hotels Component ---
+// This component is unchanged, but will now show 3 random hotels from the new data
 const FeaturedHotels = ({ db, appId, onSelectHotel }) => {
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -574,7 +569,7 @@ const FeaturedHotels = ({ db, appId, onSelectHotel }) => {
   );
 };
 
-// --- Features Component ---
+// --- Features Component (Unchanged) ---
 const Features = () => {
   return (
     <section className="py-16 sm:py-24 bg-white">
@@ -610,7 +605,7 @@ const Features = () => {
   );
 };
 
-// --- Footer Component ---
+// --- Footer Component (Unchanged) ---
 const Footer = () => {
   return (
     <footer className="bg-gray-800 text-gray-300">
@@ -666,10 +661,11 @@ const Home = ({ onSearch, db, appId, onSelectHotel }) => {
   );
 };
 
-// --- Search Results Page Component ---
+// --- NEW: Search Results Page (with "Show All" logic) ---
 const SearchResults = ({ db, appId, criteria, onGoHome, onSelectHotel }) => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false); // <-- NEW state for pagination
 
   useEffect(() => {
     if (!db) return;
@@ -679,12 +675,18 @@ const SearchResults = ({ db, appId, criteria, onGoHome, onSelectHotel }) => {
       try {
         const hotelsColRef = collection(db, `/artifacts/${appId}/public/data/hotels`);
         let q;
+        
         if (criteria.destination && criteria.destination !== 'All') {
-          // Specific search
-          q = query(hotelsColRef, where("location", "==", criteria.destination));
+          // --- NEW: Case-insensitive search on 'location_lowercase' ---
+          const searchTerm = criteria.destination.toLowerCase().trim();
+          const baseQuery = query(hotelsColRef, where("location_lowercase", "==", searchTerm));
+          
+          // --- NEW: Apply limit(3) unless showAll is true ---
+          q = showAll ? baseQuery : query(baseQuery, limit(3));
+
         } else {
-          // "Hotels" link clicked, show all
-          q = query(hotelsColRef);
+          // "Hotels" link clicked, show all (limited to 10 for performance)
+          q = query(hotelsColRef, limit(10));
         }
         
         const querySnapshot = await getDocs(q);
@@ -698,7 +700,7 @@ const SearchResults = ({ db, appId, criteria, onGoHome, onSelectHotel }) => {
     };
 
     fetchResults();
-  }, [db, appId, criteria]);
+  }, [db, appId, criteria, showAll]); // <-- Add showAll to dependency array
 
   return (
     <section className="py-16 sm:py-24 bg-white min-h-[60vh]">
@@ -718,14 +720,29 @@ const SearchResults = ({ db, appId, criteria, onGoHome, onSelectHotel }) => {
         {loading ? (
           <p className="text-center text-gray-600">Searching for hotels...</p>
         ) : results.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {results.map((hotel) => (
-              <HotelCard key={hotel.id} hotel={hotel} onSelectHotel={onSelectHotel} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {results.map((hotel) => (
+                <HotelCard key={hotel.id} hotel={hotel} onSelectHotel={onSelectHotel} />
+              ))}
+            </div>
+            
+            {/* --- NEW: "Show All" Button --- */}
+            {/* Show this button only if we are not already showing all, and we hit the initial limit of 3 */}
+            {!showAll && results.length === 3 && criteria.destination !== 'All' && (
+              <div className="text-center mt-12">
+                <button
+                  onClick={() => setShowAll(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg transition-colors text-lg"
+                >
+                  Show All Results
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <p className="text-center text-gray-600 text-lg">
-            No hotels found. Try "Miami, Florida", "Aspen, Colorado", or "New York, NY" after adding sample data.
+            No hotels found. Try "Mumbai" or "Delhi" after adding sample data.
           </p>
         )}
       </div>
@@ -733,7 +750,8 @@ const SearchResults = ({ db, appId, criteria, onGoHome, onSelectHotel }) => {
   );
 };
 
-// --- Amenity Icon Helper ---
+
+// --- Amenity Icon Helper (Unchanged) ---
 const AmenityIcon = ({ name }) => {
   const iconProps = { className: "w-6 h-6 text-blue-600" };
   const nameLower = name.toLowerCase();
@@ -747,16 +765,17 @@ const AmenityIcon = ({ name }) => {
   return <StarIcon className="w-6 h-6 text-blue-600" />;
 };
 
-// --- NEW: Room Card Component (for Hotel Details Page) ---
+// --- Room Card Component (Unchanged) ---
 const RoomCard = ({ hotel, room, onNavigate, user }) => {
 
   const handleBookRoom = () => {
     if (!user) {
+      // Use alert for simplicity in this environment
       alert("Please sign in to book this room.");
-      // Or we could trigger the sign-in flow
-      // const auth = getAuth();
-      // const provider = new GoogleAuthProvider();
-      // signInWithRedirect(auth, provider);
+      // Trigger the sign-in redirect
+      const auth = getAuth();
+      const provider = new GoogleAuthProvider();
+      signInWithRedirect(auth, provider);
       return;
     }
     // Navigate to payment page, passing hotel AND room info
@@ -803,7 +822,7 @@ const RoomCard = ({ hotel, room, onNavigate, user }) => {
 };
 
 
-// --- UPDATED: Hotel Details Page Component ---
+// --- Hotel Details Page (Unchanged from last version) ---
 const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
   const [hotel, setHotel] = useState(null);
   const [rooms, setRooms] = useState([]); // <-- NEW: State for rooms
@@ -949,15 +968,6 @@ const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
                   <span>{hotel.rating}</span>
                 </span>
               </div>
-              
-              {/* This "Book Now" button is removed, as booking is per-room now */}
-              {/* <button
-                onClick={handleBookNow}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-lg transition-colors duration-300 text-lg shadow-lg hover:shadow-xl"
-              >
-                Book Now
-              </button>
-              */}
             </div>
           </div>
         </div>
@@ -966,7 +976,7 @@ const HotelDetailsPage = ({ db, appId, hotelId, onNavigate, user }) => {
   );
 };
 
-// --- About Page Component ---
+// --- About Page Component (Unchanged) ---
 const AboutPage = () => (
   <div className="py-16 sm:py-24 bg-white">
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl">
@@ -984,7 +994,7 @@ const AboutPage = () => (
   </div>
 );
 
-// --- UPDATED: My Bookings Page Component ---
+// --- My Bookings Page (Unchanged) ---
 const MyBookingsPage = ({ db, appId, user, onSelectHotel }) => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1068,7 +1078,7 @@ const MyBookingsPage = ({ db, appId, user, onSelectHotel }) => {
   );
 };
 
-// --- UPDATED: Payment Page Component ---
+// --- Payment Page (Unchanged) ---
 const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -1227,7 +1237,7 @@ const PaymentPage = ({ db, appId, user, bookingDetails, onNavigate }) => {
 };
 
 
-// --- Main App Component ---
+// --- Main App Component (Unchanged) ---
 export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [page, setPage] = useState('home');
@@ -1333,8 +1343,10 @@ export default function App() {
         return <MyBookingsPage db={db} appId={appId} user={user} onSelectHotel={(id) => handleNavigate('hotelDetails', { hotelId: id })} />;
       case 'payment':
         if (!user) {
-          alert("Please sign in to continue.");
-          handleNavigate('home');
+          // Trigger sign-in redirect instead of just showing alert
+          const auth = getAuth();
+          const provider = new GoogleAuthProvider();
+          signInWithRedirect(auth, provider);
           return null;
         }
         return <PaymentPage db={db} appId={appId} user={user} bookingDetails={pageData} onNavigate={handleNavigate} />;
