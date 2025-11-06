@@ -33,10 +33,15 @@ let viteFirebaseConfig = undefined;
 let viteAppId = undefined;
 let viteInitialAuthToken = undefined;
 
-if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
-  viteFirebaseConfig = import.meta.env.VITE_FIREBASE_CONFIG;
-  viteAppId = import.meta.env.VITE_APP_ID;
-  viteInitialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
+// Check for the preview environment's global variable first.
+// This avoids touching import.meta in the preview compiler, which causes the warning.
+if (typeof __firebase_config !== 'undefined') {
+    // We are in the preview environment, do nothing here.
+} else if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
+    // We are in the Vite/Netlify environment
+    viteFirebaseConfig = import.meta.env.VITE_FIREBASE_CONFIG;
+    viteAppId = import.meta.env.VITE_APP_ID;
+    viteInitialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
 }
 
 let fallbackFirebaseConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : undefined;
@@ -283,7 +288,7 @@ const BookingForm = ({ onSearch }) => {
             id="destination"
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-gray-900"
             placeholder="e.g., Miami, Florida"
           />
         </div>
@@ -297,7 +302,7 @@ const BookingForm = ({ onSearch }) => {
             value={checkIn}
             onChange={(e) => setCheckIn(e.target.value)}
             min={today}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-gray-900"
           />
         </div>
         <div>
@@ -310,7 +315,7 @@ const BookingForm = ({ onSearch }) => {
             value={checkOut}
             onChange={(e) => setCheckOut(e.target.value)}
             min={checkIn || today}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-gray-900"
           />
         </div>
         <div className="md:col-span-1 lg:col-span-1">
@@ -323,7 +328,7 @@ const BookingForm = ({ onSearch }) => {
             value={guests}
             onChange={(e) => setGuests(e.target.value)}
             min="1"
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-gray-900"
           />
         </div>
         <div className="md:col-span-2 lg:col-span-1">
